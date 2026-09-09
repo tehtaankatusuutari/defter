@@ -103,6 +103,27 @@
   .action-banner.show{display:flex;}
   .action-banner b{font-size:14.5px;}
 
+  .kasa-panel{
+    border:2px solid var(--ink);
+    background:var(--panel);
+    padding:16px 18px;
+    margin-bottom:14px;
+    text-align:center;
+  }
+  .kasa-panel .kasa-label{
+    font-size:11.5px;
+    color:var(--ink-soft);
+    margin-bottom:6px;
+    text-transform:uppercase;
+    letter-spacing:0.4px;
+  }
+  .kasa-panel .kasa-value{
+    font-family:var(--mono);
+    font-size:34px;
+    font-weight:700;
+  }
+  .kasa-panel .kasa-value.negative{color:var(--rust);}
+
   /* Summary strip */
   .summary{
     display:grid;
@@ -472,6 +493,11 @@
   </header>
 
   <div class="action-banner" id="actionBanner"></div>
+
+  <div class="kasa-panel">
+    <div class="kasa-label">Kasa — toplam bakiye (tüm gelirler − ödenen tüm giderler)</div>
+    <div class="kasa-value" id="kasaValue">—</div>
+  </div>
 
   <div class="summary">
     <div class="cell income">
@@ -1000,6 +1026,14 @@ function billStatus(bill){
 
 function render(){
   document.getElementById("todayLabel").textContent = fmtDate(todayISO());
+
+  // Kasa: girilmiş tüm gelirler eksi fiilen ödenmiş tüm giderler (tüm zamanlar).
+  const totalIncome = data.sales.reduce((a,s)=>a+Number(s.amount),0);
+  const totalPaidExpense = data.bills.filter(b=>b.status==="odendi").reduce((a,b)=>a+Number(b.amount),0);
+  const kasa = totalIncome - totalPaidExpense;
+  const kasaEl = document.getElementById("kasaValue");
+  kasaEl.textContent = fmtEUR(kasa);
+  kasaEl.classList.toggle("negative", kasa < 0);
 
   const ym = todayISO().slice(0,7);
   const monthSales = data.sales.filter(s => s.date.slice(0,7) === ym);
