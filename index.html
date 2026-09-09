@@ -679,7 +679,7 @@
       </div>
       <button type="submit">Kaydet</button>
     </form>
-    <div class="ledger-stat" id="giderTotalStat">Toplam gider (ödenen + bekleyen): —</div>
+    <div class="ledger-stat" id="giderTotalStat">Bu ayın toplam gideri (ödenen + bekleyen): —</div>
     <div class="ledger" id="faturaLedger"></div>
   </div>
 
@@ -1208,10 +1208,12 @@ function renderSales(){
 }
 
 function renderBills(){
-  const totalPaid = data.bills.filter(b=>b.status==="odendi").reduce((a,b)=>a+Number(b.amount),0);
-  const totalPending = data.bills.filter(b=>b.status!=="odendi").reduce((a,b)=>a+Number(b.amount),0);
+  const ym = todayISO().slice(0,7);
+  const monthBills = data.bills.filter(b=>b.due.slice(0,7)===ym);
+  const totalPaid = monthBills.filter(b=>b.status==="odendi").reduce((a,b)=>a+Number(b.amount),0);
+  const totalPending = monthBills.filter(b=>b.status!=="odendi").reduce((a,b)=>a+Number(b.amount),0);
   document.getElementById("giderTotalStat").textContent =
-    `Toplam gider (ödenen + bekleyen): ${fmtEUR(totalPaid+totalPending)}  —  ödenen: ${fmtEUR(totalPaid)}, bekleyen: ${fmtEUR(totalPending)}`;
+    `Bu ayın toplam gideri (ödenen + bekleyen): ${fmtEUR(totalPaid+totalPending)}  —  ödenen: ${fmtEUR(totalPaid)}, bekleyen: ${fmtEUR(totalPending)}`;
 
   const el = document.getElementById("faturaLedger");
   el.innerHTML = "";
