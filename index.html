@@ -464,7 +464,8 @@
     <div class="top-right">
       <div class="date" id="todayLabel"></div>
       <button class="push-btn" id="pushBtn" hidden>🔔 Bildirimleri aç</button>
-      <button class="logout-btn" id="logoutBtn">Çıkış yap</button>
+      <button class="push-btn" id="cloudLinkBtn" hidden>☁️ Buluta bağlan</button>
+      <button class="logout-btn" id="logoutBtn" hidden>Çıkış yap</button>
     </div>
   </header>
 
@@ -595,16 +596,18 @@
     <div class="ledger" id="faturaLedger"></div>
   </div>
 
-  <div class="foot-note">Veriler Supabase'te bulutta saklanır, cihazlar arası senkronizedir. ALV hesabı bilgilendirme amaçlıdır, resmi beyan öncesi muhasebecinle teyit et.</div>
+  <div class="foot-note" id="footNote"></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const DB_URL_KEY = "muhasebe_db_url";
 const DB_KEY_KEY = "muhasebe_db_key";
+const LOCAL_DATA_KEY = "defter_local_data_v1";
 
 const VAPID_PUBLIC_KEY = "BOOlPLQ7t3YmA70ScOcmpaY9aFTvRFZAz1Rx2oSpBXWomP0wn8uoD3e9gRo-9SIOKD2WHRn_eg-GiKnw23m4b2w";
 
+let MODE = "local"; // "local" (bu cihazda, localStorage) veya "cloud" (Supabase)
 let supabaseClient = null;
 let currentUser = null;
 let realtimeChannel = null;
@@ -672,9 +675,12 @@ function initSupabaseClient(){
 async function boot(){
   const { url, key } = getCreds();
   if(!url || !key){
-    showSetup();
+    // Henüz buluta bağlanılmamış — hemen bu cihazda kullanmaya başla.
+    MODE = "local";
+    await enterApp();
     return;
   }
+  MODE = "cloud";
   if(!initSupabaseClient()){
     showSetup("Supabase kütüphanesi yüklenemedi. İnternet bağlantını kontrol et.");
     return;
@@ -699,11 +705,24 @@ async function enterApp(){
   document.getElementById("authScreen").hidden = true;
   document.getElementById("appWrap").hidden = false;
   document.getElementById("daySelect").value = todayISO();
-  subscribeRealtime();
-  await registerServiceWorker();
-  await refreshPushButton();
+  document.getElementById("logoutBtn").hidden = MODE !== "cloud";
+  document.getElementById("cloudLinkBtn").hidden = MODE !== "local";
+  document.getElementById("footNote").textContent = MODE === "cloud"
+    ? "Veriler Supabase'te bulutta saklanır, cihazlar arası senkronizedir. ALV hesabı bilgilendirme amaçlıdır, resmi beyan öncesi muhasebecinle teyit et."
+    : "Veriler sadece bu cihazda / bu tarayıcıda saklanır. Diğer cihazlardan erişmek istersen \"Buluta bağlan\"ı kullan. ALV hesabı bilgilendirme amaçlıdır, resmi beyan öncesi muhasebecinle teyit et.";
+  if(MODE === "cloud"){
+    subscribeRealtime();
+    await registerServiceWorker();
+    await refreshPushButton();
+  } else {
+    document.getElementById("pushBtn").hidden = true;
+  }
   await loadData();
 }
+
+document.getElementById("cloudLinkBtn").addEventListener("click", ()=>{
+  showSetup();
+});
 
 function subscribeRealtime(){
   if(realtimeChannel) return;
@@ -816,9 +835,31 @@ document.getElementById("logoutBtn").addEventListener("click", async ()=>{
   if(supabaseClient) await supabaseClient.auth.signOut();
 });
 
-/* ---------- Data (Supabase) ---------- */
+/* ---------- Data (local veya Supabase) ---------- */
+
+function loadLocalData(){
+  try{
+    const raw = localStorage.getItem(LOCAL_DATA_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){ console.error("Yerel veri okunamadı:", e); }
+  return { sales: [], bills: [] };
+}
+
+function saveLocalData(){
+  try{
+    localStorage.setItem(LOCAL_DATA_KEY, JSON.stringify(data));
+  }catch(e){
+    console.error("Yerel veri kaydedilemedi:", e);
+    alert("Kaydedilemedi: tarayıcı depolaması dolu ya da erişilemiyor.");
+  }
+}
 
 async function loadData(){
+  if(MODE === "local"){
+    data = loadLocalData();
+    render();
+    return;
+  }
   const [salesRes, billsRes] = await Promise.all([
     supabaseClient.from("sales").select("*").order("date", { ascending:false }),
     supabaseClient.from("bills").select("*").order("due", { ascending:true })
@@ -837,6 +878,12 @@ async function loadData(){
 }
 
 async function addSaleRecord(sale){
+  if(MODE === "local"){
+    data.sales.push({ id: uid(), ...sale });
+    saveLocalData();
+    render();
+    return true;
+  }
   const { error } = await supabaseClient.from("sales").insert([sale]);
   if(error){ alert("Kaydedilemedi: "+error.message); return false; }
   await loadData();
@@ -844,12 +891,24 @@ async function addSaleRecord(sale){
 }
 
 async function deleteSaleRecord(id){
+  if(MODE === "local"){
+    data.sales = data.sales.filter(s=>s.id!==id);
+    saveLocalData();
+    render();
+    return;
+  }
   const { error } = await supabaseClient.from("sales").delete().eq("id", id);
   if(error){ alert("Silinemedi: "+error.message); return; }
   await loadData();
 }
 
 async function addBillRecord(bill){
+  if(MODE === "local"){
+    data.bills.push({ id: uid(), ...bill });
+    saveLocalData();
+    render();
+    return true;
+  }
   const { error } = await supabaseClient.from("bills").insert([{
     name: bill.name, amount: bill.amount, due: bill.due,
     status: bill.status, paid_date: bill.paidDate,
@@ -861,6 +920,12 @@ async function addBillRecord(bill){
 }
 
 async function deleteBillRecord(id){
+  if(MODE === "local"){
+    data.bills = data.bills.filter(b=>b.id!==id);
+    saveLocalData();
+    render();
+    return;
+  }
   const { error } = await supabaseClient.from("bills").delete().eq("id", id);
   if(error){ alert("Silinemedi: "+error.message); return; }
   await loadData();
@@ -870,20 +935,34 @@ async function markBillPaid(id){
   const bill = data.bills.find(b=>b.id===id);
   if(!bill) return;
   const paidDate = todayISO();
+  const nextDue = (bill.recurring && bill.recurDay) ? nextRecurDate(bill.due, bill.recurDay) : null;
+  const alreadyExists = nextDue && data.bills.some(b=>b.name===bill.name && b.due===nextDue);
+
+  if(MODE === "local"){
+    bill.status = "odendi";
+    bill.paidDate = paidDate;
+    if(nextDue && !alreadyExists){
+      data.bills.push({
+        id: uid(), name: bill.name, amount: bill.amount, due: nextDue,
+        status: "beklemede", paidDate: null,
+        recurring: true, recurDay: bill.recurDay, vat: bill.vat
+      });
+    }
+    saveLocalData();
+    render();
+    return;
+  }
+
   const { error } = await supabaseClient.from("bills")
     .update({ status:"odendi", paid_date: paidDate }).eq("id", id);
   if(error){ alert("Güncellenemedi: "+error.message); return; }
 
-  if(bill.recurring && bill.recurDay){
-    const nextDue = nextRecurDate(bill.due, bill.recurDay);
-    const alreadyExists = data.bills.some(b=>b.name===bill.name && b.due===nextDue);
-    if(!alreadyExists){
-      await supabaseClient.from("bills").insert([{
-        name: bill.name, amount: bill.amount, due: nextDue,
-        status: "beklemede", paid_date: null,
-        recurring: true, recur_day: bill.recurDay, vat: bill.vat
-      }]);
-    }
+  if(nextDue && !alreadyExists){
+    await supabaseClient.from("bills").insert([{
+      name: bill.name, amount: bill.amount, due: nextDue,
+      status: "beklemede", paid_date: null,
+      recurring: true, recur_day: bill.recurDay, vat: bill.vat
+    }]);
   }
   await loadData();
 }
