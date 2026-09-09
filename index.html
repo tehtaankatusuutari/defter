@@ -346,6 +346,13 @@
   }
   form.entry-form button:disabled{opacity:0.6;cursor:default;}
 
+  .ledger-stat{
+    font-family:var(--mono);
+    font-size:13px;
+    color:var(--ink-soft);
+    padding:8px 2px;
+    border-top:1px solid var(--line);
+  }
   .ledger{border-top:1px solid var(--line);}
   .row{
     display:flex;
@@ -672,6 +679,7 @@
       </div>
       <button type="submit">Kaydet</button>
     </form>
+    <div class="ledger-stat" id="giderTotalStat">Toplam gider (ödenen + bekleyen): —</div>
     <div class="ledger" id="faturaLedger"></div>
   </div>
 
@@ -1200,6 +1208,11 @@ function renderSales(){
 }
 
 function renderBills(){
+  const totalPaid = data.bills.filter(b=>b.status==="odendi").reduce((a,b)=>a+Number(b.amount),0);
+  const totalPending = data.bills.filter(b=>b.status!=="odendi").reduce((a,b)=>a+Number(b.amount),0);
+  document.getElementById("giderTotalStat").textContent =
+    `Toplam gider (ödenen + bekleyen): ${fmtEUR(totalPaid+totalPending)}  —  ödenen: ${fmtEUR(totalPaid)}, bekleyen: ${fmtEUR(totalPending)}`;
+
   const el = document.getElementById("faturaLedger");
   el.innerHTML = "";
   const sorted = [...data.bills].sort((a,b)=> a.due.localeCompare(b.due));
