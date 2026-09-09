@@ -124,6 +124,48 @@
   }
   .kasa-panel .kasa-value.negative{color:var(--rust);}
 
+  .proj-panel{
+    border:1px dashed var(--slate);
+    background:var(--slate-bg);
+    padding:12px 16px;
+    margin-bottom:14px;
+    text-align:center;
+  }
+  .proj-panel .proj-label{
+    font-size:11px;
+    color:var(--slate);
+    margin-bottom:4px;
+  }
+  .proj-panel .proj-value{
+    font-family:var(--mono);
+    font-size:22px;
+    font-weight:700;
+    color:var(--slate);
+  }
+  .proj-panel .proj-value.negative{color:var(--rust);}
+  .proj-input-row{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    margin-top:10px;
+    flex-wrap:wrap;
+  }
+  .proj-input-row label{
+    font-size:11.5px;
+    color:var(--ink-soft);
+  }
+  .proj-input-row input{
+    width:110px;
+    font-family:var(--sans);
+    font-size:13px;
+    padding:5px 7px;
+    border:1px solid var(--line);
+    background:#fff;
+    color:var(--ink);
+    text-align:right;
+  }
+
   /* Summary strip */
   .summary{
     display:grid;
@@ -499,6 +541,15 @@
     <div class="kasa-value" id="kasaValue">—</div>
   </div>
 
+  <div class="proj-panel">
+    <div class="proj-label">Ay sonu tahmini kasa — bu ayın bekleyen giderleri ödenmiş sayılırsa</div>
+    <div class="proj-value" id="projValue">—</div>
+    <div class="proj-input-row">
+      <label for="projEstIncome">+ Tahmini ek gelir (opsiyonel, sadece tahmin için)</label>
+      <input type="number" step="0.01" id="projEstIncome" placeholder="0">
+    </div>
+  </div>
+
   <div class="summary">
     <div class="cell income">
       <div class="label">Bu ay gelir</div>
@@ -632,6 +683,7 @@
 const DB_URL_KEY = "muhasebe_db_url";
 const DB_KEY_KEY = "muhasebe_db_key";
 const LOCAL_DATA_KEY = "defter_local_data_v1";
+const EST_INCOME_KEY = "defter_est_income";
 
 const VAPID_PUBLIC_KEY = "BOOlPLQ7t3YmA70ScOcmpaY9aFTvRFZAz1Rx2oSpBXWomP0wn8uoD3e9gRo-9SIOKD2WHRn_eg-GiKnw23m4b2w";
 
@@ -647,6 +699,11 @@ function todayISO(){ return new Date().toISOString().slice(0,10); }
 function fmtDate(iso){
   const d = new Date(iso+"T00:00:00");
   return d.toLocaleDateString('tr-TR',{day:'2-digit',month:'2-digit',year:'numeric'});
+}
+function endOfMonthISO(){
+  const d = new Date();
+  const last = new Date(d.getFullYear(), d.getMonth()+1, 0);
+  return last.toISOString().slice(0,10);
 }
 function vatPortion(gross, ratePct){
   const rate = Number(ratePct)||0;
@@ -1035,6 +1092,17 @@ function render(){
   kasaEl.textContent = fmtEUR(kasa);
   kasaEl.classList.toggle("negative", kasa < 0);
 
+  // Ay sonu tahmini kasa: bu ay içinde vadesi gelen ama henüz ödenmemiş
+  // giderler ödenmiş sayılır, üstüne (varsa) elle girilen tahmini gelir eklenir.
+  const monthEnd = endOfMonthISO();
+  const pendingThisMonth = data.bills.filter(b => b.status !== "odendi" && b.due <= monthEnd);
+  const pendingTotal = pendingThisMonth.reduce((a,b)=>a+Number(b.amount),0);
+  const estIncome = Number(localStorage.getItem(EST_INCOME_KEY)) || 0;
+  const projected = kasa - pendingTotal + estIncome;
+  const projEl = document.getElementById("projValue");
+  projEl.textContent = fmtEUR(projected);
+  projEl.classList.toggle("negative", projected < 0);
+
   const ym = todayISO().slice(0,7);
   const monthSales = data.sales.filter(s => s.date.slice(0,7) === ym);
   const monthPaidBills = data.bills.filter(b => b.status === "odendi" && b.paidDate && b.paidDate.slice(0,7) === ym);
@@ -1186,6 +1254,15 @@ document.addEventListener("click", async (e)=>{
 });
 
 document.getElementById("daySelect").addEventListener("change", render);
+
+const projEstIncomeInput = document.getElementById("projEstIncome");
+projEstIncomeInput.value = localStorage.getItem(EST_INCOME_KEY) || "";
+projEstIncomeInput.addEventListener("input", ()=>{
+  const v = projEstIncomeInput.value;
+  if(v === ""){ localStorage.removeItem(EST_INCOME_KEY); }
+  else { localStorage.setItem(EST_INCOME_KEY, v); }
+  render();
+});
 
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
