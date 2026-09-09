@@ -675,6 +675,17 @@ function initSupabaseClient(){
 }
 
 async function boot(){
+  if(location.hash === "#local"){
+    // Foolproof reset link (index.html#local): always drop any saved cloud
+    // credentials/session and start fresh in local mode, no button-hunting.
+    history.replaceState(null, "", location.pathname + location.search);
+    localStorage.removeItem(DB_URL_KEY);
+    localStorage.removeItem(DB_KEY_KEY);
+    if(initSupabaseClient()){
+      try{ await supabaseClient.auth.signOut(); }catch(e){}
+      supabaseClient = null;
+    }
+  }
   const { url, key } = getCreds();
   if(!url || !key){
     // Henüz buluta bağlanılmamış — hemen bu cihazda kullanmaya başla.
