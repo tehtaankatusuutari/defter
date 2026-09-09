@@ -442,6 +442,7 @@
       <input type="text" id="setupKey" placeholder="eyJhbGciOi..." autocapitalize="none" autocorrect="off" spellcheck="false">
       <button id="setupBtn">Kaydet ve devam et</button>
       <div class="auth-error" id="setupError"></div>
+      <div class="auth-switch"><a id="useLocalLink">Bunu boş ver, bu cihazda yerel kullan</a></div>
     </div>
 
     <div class="auth-panel" id="loginPanel" hidden>
@@ -453,6 +454,7 @@
       <button id="loginBtn">Giriş yap</button>
       <div class="auth-error" id="loginError"></div>
       <div class="auth-switch"><a id="editSetupLink">Supabase proje bilgilerini değiştir</a></div>
+      <div class="auth-switch"><a id="useLocalLink2">Bulut bağlantısını kaldır, bu cihazda yerel kullan</a></div>
     </div>
   </div>
 </div>
@@ -808,6 +810,17 @@ document.getElementById("editSetupLink").addEventListener("click", ()=>{
   document.getElementById("setupUrl").value = localStorage.getItem(DB_URL_KEY) || "";
   document.getElementById("setupKey").value = localStorage.getItem(DB_KEY_KEY) || "";
 });
+
+async function useLocalMode(){
+  localStorage.removeItem(DB_URL_KEY);
+  localStorage.removeItem(DB_KEY_KEY);
+  if(supabaseClient){
+    try{ await supabaseClient.auth.signOut(); }catch(e){}
+  }
+  await boot();
+}
+document.getElementById("useLocalLink").addEventListener("click", useLocalMode);
+document.getElementById("useLocalLink2").addEventListener("click", useLocalMode);
 
 document.getElementById("loginBtn").addEventListener("click", async ()=>{
   const email = document.getElementById("loginUser").value.trim();
