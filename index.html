@@ -143,6 +143,12 @@
     color:var(--slate);
   }
   .proj-panel .proj-value.negative{color:var(--rust);}
+  .proj-panel .proj-sub{
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--ink-soft);
+    margin-top:8px;
+  }
   .proj-input-row{
     display:flex;
     align-items:center;
@@ -549,12 +555,13 @@
   </div>
 
   <div class="proj-panel">
-    <div class="proj-label">Ay sonu tahmini kasa — bu ayın bekleyen giderleri ödenmiş sayılırsa</div>
-    <div class="proj-value" id="projValue">—</div>
+    <div class="proj-label">Ay sonu tahmini durum</div>
     <div class="proj-input-row">
-      <label for="projEstIncome">+ Tahmini ek gelir (opsiyonel, sadece tahmin için)</label>
-      <input type="number" step="0.01" id="projEstIncome" placeholder="0">
+      <label for="projEstIncome">Bu ay tahmini toplam gelir</label>
+      <input type="number" step="0.01" id="projEstIncome" placeholder="örn. 6000">
     </div>
+    <div class="proj-sub" id="projExpenseLine">Bu ayın giderleri (ödenen + bekleyen): —</div>
+    <div class="proj-value" id="projValue">—</div>
   </div>
 
   <div class="summary">
@@ -707,11 +714,6 @@ function todayISO(){ return new Date().toISOString().slice(0,10); }
 function fmtDate(iso){
   const d = new Date(iso+"T00:00:00");
   return d.toLocaleDateString('tr-TR',{day:'2-digit',month:'2-digit',year:'numeric'});
-}
-function endOfMonthISO(){
-  const d = new Date();
-  const last = new Date(d.getFullYear(), d.getMonth()+1, 0);
-  return last.toISOString().slice(0,10);
 }
 function vatPortion(gross, ratePct){
   const rate = Number(ratePct)||0;
@@ -1100,16 +1102,25 @@ function render(){
   kasaEl.textContent = fmtEUR(kasa);
   kasaEl.classList.toggle("negative", kasa < 0);
 
-  // Ay sonu tahmini kasa: bu ay içinde vadesi gelen ama henüz ödenmemiş
-  // giderler ödenmiş sayılır, üstüne (varsa) elle girilen tahmini gelir eklenir.
-  const monthEnd = endOfMonthISO();
-  const pendingThisMonth = data.bills.filter(b => b.status !== "odendi" && b.due <= monthEnd);
-  const pendingTotal = pendingThisMonth.reduce((a,b)=>a+Number(b.amount),0);
-  const estIncome = Number(localStorage.getItem(EST_INCOME_KEY)) || 0;
-  const projected = kasa - pendingTotal + estIncome;
+  // Ay sonu tahmini durum: gelir henüz belli olmadığından elle girilen bir
+  // tahmini toplam gelirden, bu ayın kesin olan (ödenen + bekleyen) giderleri
+  // düşülür. Gider tarafı net/kesin, gelir tarafı tahmini.
+  const projYm = todayISO().slice(0,7);
+  const monthBillsForProj = data.bills.filter(b => b.due.slice(0,7) === projYm);
+  const monthExpenseTotal = monthBillsForProj.reduce((a,b)=>a+Number(b.amount),0);
+  document.getElementById("projExpenseLine").textContent =
+    `Bu ayın giderleri (ödenen + bekleyen): ${fmtEUR(monthExpenseTotal)}`;
+  const estIncomeRaw = localStorage.getItem(EST_INCOME_KEY);
   const projEl = document.getElementById("projValue");
-  projEl.textContent = fmtEUR(projected);
-  projEl.classList.toggle("negative", projected < 0);
+  if(!estIncomeRaw){
+    projEl.textContent = "Tahmini geliri gir";
+    projEl.classList.remove("negative");
+  } else {
+    const estIncome = Number(estIncomeRaw) || 0;
+    const projected = estIncome - monthExpenseTotal;
+    projEl.textContent = (projected >= 0 ? "Net kalan: " : "Net zarar: ") + fmtEUR(Math.abs(projected));
+    projEl.classList.toggle("negative", projected < 0);
+  }
 
   const ym = todayISO().slice(0,7);
   const monthSales = data.sales.filter(s => s.date.slice(0,7) === ym);
